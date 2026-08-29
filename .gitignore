@@ -1,0 +1,22 @@
+# Local staff data and user-specific settings
+/staff.csv
+/Password Expiration App.settings.json
+
+# Generated password-expiration reports
+/PwdExpire_*.csv
+
+# Outlook templates can contain organization or author metadata
+/email templates/*.oft
+
+# Replaced by README.md for the repository
+/README.txt
+
+# Windows and editor artifacts
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.vs/
+*.user
+*.tmp
+*.log
