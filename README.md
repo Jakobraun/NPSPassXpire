@@ -76,4 +76,4 @@ Repeat the check for `Password Expiration Worker.ps1`.
 
 ## License
 
-No open-source license has been selected yet. Add an appropriate license before distributing the repository publicly if you want to grant reuse rights.
+This project is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for the full terms.
