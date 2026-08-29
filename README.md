@@ -14,11 +14,13 @@ The first run installs `Microsoft.Graph.Authentication` and `Microsoft.Graph.Use
 
 ## Setup
 
-1. Copy `staff.example.csv` to `staff.csv`.
-2. Replace the example rows with the required staff names. Keep the headers exactly as shown.
+1. Create `staff.csv` in the application folder. Keep the headers exactly as shown below.
+2. Add the required staff names beneath the header row.
 3. Review the organization-specific values in `Password Expiration Worker.ps1`, particularly the staff domains and `$maxAgeDays`.
 4. Run `Launch Password Expiration Report.cmd`.
 5. Select **Connect & Run** and complete Microsoft device authentication.
+
+If `staff.csv` is missing or contains no names, the application stops before Microsoft sign-in and does not query directory accounts.
 
 Generated reports are named `PwdExpire_MM-dd_HH-mm.csv` and are intentionally excluded from Git.
 
@@ -53,7 +55,6 @@ These files are excluded by `.gitignore`. No credentials are intentionally writt
 - `Password Expiration App.ps1` — WPF interface, CSV validation, and staff matching
 - `Password Expiration Worker.ps1` — Graph authentication, account query, and report generation
 - `Launch Password Expiration Report.cmd` — Windows launcher
-- `staff.example.csv` — safe input template
 - `email templates/README.md` — guidance for locally maintained Outlook templates
 
 ## Development check

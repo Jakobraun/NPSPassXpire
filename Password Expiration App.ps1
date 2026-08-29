@@ -16,6 +16,7 @@ $authStatusPath = Join-Path $env:TEMP 'NPS-PasswordExpiration-status.txt'
 $workerOutputPath = Join-Path $env:TEMP 'NPS-PasswordExpiration-output.txt'
 $workerErrorPath = Join-Path $env:TEMP 'NPS-PasswordExpiration-error.txt'
 $requiredStaffPath = Join-Path $desktop 'staff.csv'
+$noStaffMessage = 'No staff list found. No matches will be generated. Please add names to the staff.csv file.'
 
 if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
     [System.Windows.MessageBox]::Show(
@@ -153,6 +154,7 @@ $script:expiringRows = @()
 $script:deviceCode = $null
 $script:browserProcess = $null
 $script:browserName = $null
+$script:staffListError = $null
 $script:timer = [Windows.Threading.DispatcherTimer]::new()
 $script:timer.Interval = [TimeSpan]::FromMilliseconds(500)
 
@@ -266,6 +268,21 @@ $script:timer.Add_Tick({
 $runButton.Add_Click({
     try {
         if ($script:process -and -not $script:process.HasExited) { return }
+        if (-not (Import-RequiredStaffList)) {
+            $totalText.Text = '-'
+            $schoolTotalText.Text = '-'
+            $email1DayText.Text = ''
+            $email3DayText.Text = ''
+            $email7DayText.Text = ''
+            $logText.Text = $noStaffMessage
+            [System.Windows.MessageBox]::Show(
+                $noStaffMessage,
+                'Password Expiration Report',
+                'OK',
+                'Warning'
+            ) | Out-Null
+            return
+        }
         $runButton.IsEnabled = $false
         $script:checking = $false
         $script:dotIndex = 0
@@ -387,10 +404,11 @@ function Read-SafeSiteStaff([string]$Path) {
         $parser.Close()
     }
 
-    if ($records.Count -lt 2) { throw 'The CSV must contain a header and at least one staff member.' }
+    if ($records.Count -eq 0) { return @() }
     if ($records[0][0].Trim() -ine 'First Name' -or $records[0][1].Trim() -ine 'Last Name') {
         throw 'The two headers must be First Name and Last Name.'
     }
+    if ($records.Count -eq 1) { return @() }
 
     $safeRows = [System.Collections.Generic.List[object]]::new()
     for ($index = 1; $index -lt $records.Count; $index++) {
@@ -413,16 +431,37 @@ function Set-SiteStaff([string]$Path) {
     Update-SchoolMatches
 }
 
-try {
+function Import-RequiredStaffList {
+    $script:staffListError = $null
     if (-not (Test-Path -LiteralPath $requiredStaffPath -PathType Leaf)) {
-        throw "Required file not found: $requiredStaffPath"
+        $script:siteStaff = @()
+        $importedTotalText.Text = '0'
+        Update-SchoolMatches
+        $logText.Text = $noStaffMessage
+        return $false
     }
-    Set-SiteStaff -Path $requiredStaffPath
+
+    try {
+        Set-SiteStaff -Path $requiredStaffPath
+    } catch {
+        $script:siteStaff = @()
+        $script:staffListError = $_.Exception.Message
+        $importedTotalText.Text = '!'
+        Update-SchoolMatches
+        $logText.Text = 'STAFF.CSV ERROR: ' + $script:staffListError
+        return $false
+    }
+
+    if ($script:siteStaff.Count -eq 0) {
+        $logText.Text = $noStaffMessage
+        return $false
+    }
+
+    return $true
+}
+
+if (Import-RequiredStaffList) {
     $logText.Text = "Loaded staff.csv: $($script:siteStaff.Count) staff member(s). Select Connect & Run to begin."
-} catch {
-    $script:siteStaff = @()
-    $importedTotalText.Text = '!'
-    $logText.Text = 'STAFF.CSV ERROR: ' + $_.Exception.Message
 }
 
 $window.Add_Closing({
