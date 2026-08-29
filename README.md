@@ -1,6 +1,6 @@
 # Password Expiration Report
 
-A portable Windows PowerShell application that queries Microsoft Graph for staff accounts whose passwords are expected to expire soon. It produces a seven-day CSV report and groups email addresses for one-, three-, and seven-day notifications. 
+A portable Windows PowerShell application that queries Microsoft Graph for staff accounts whose passwords expired within the last 100 days or are expected to expire soon. It produces a seven-day CSV report and groups email addresses for already-expired, one-, three-, and seven-day notifications.
 This is designed to work at Norfolk Public Schools where a password expiration policy of 180 days is still in place in 2026 for staff accounts.
 
 ## Requirements
@@ -22,6 +22,8 @@ The first run installs `Microsoft.Graph.Authentication` and `Microsoft.Graph.Use
 
 If `staff.csv` is missing or contains no names, the application stops before Microsoft sign-in and does not query directory accounts.
 
+Before each run, the application filters the source table and writes unique valid names to `staff_sanitized.csv`. It accepts either `First Name` and `Last Name` columns or an asset export with a `Location` column. In an asset export, values beginning with `Staff:` are converted from full names to first and last names; `Room:` and `Student:` rows are excluded. Valid two-column first-name/last-name rows can also be appended to an asset export. Non-English and unsupported characters are removed, and consecutive whitespace is reduced to one space. For example, `Sarah ðŸ˜ƒ` and `Connor ðŸš€` become `Sarah` and `Connor`. Names are formatted with an initial capital and lowercase remaining letters, with each hyphenated segment capitalized, then sorted by last name. Rows with missing names, unsafe spreadsheet formulas, names longer than 80 characters, malformed CSV data, or reserved placeholder values are skipped. Reserved values are matched case-insensitively: `NULL`, `none`, `TRUE`, `FALSE`, and `na`. The account query and site matching use only the sanitized file.
+
 Generated reports are named `PwdExpire_MM-dd_HH-mm.csv` and are intentionally excluded from Git.
 
 ## Staff CSV format
@@ -32,13 +34,14 @@ Alex,Rivera
 Taylor,Morgan
 ```
 
-The application accepts fewer than 500 lines and a maximum file size of 128 KB. Names are validated before use.
+The application accepts fewer than 500 lines and a maximum file size of 128 KB. The table must include `First Name` and `Last Name` headers, or a `Location` column containing `Staff:` values; other columns are ignored. Sanitized names contain only English letters, single spaces, periods, apostrophes, and hyphens.
 
 ## Privacy and security
 
 This application handles directory and staff information. Do not commit:
 
 - `staff.csv`, which contains the real staff list
+- `staff_sanitized.csv`, which contains the filtered working staff list
 - generated `PwdExpire_*.csv` reports, which contain names, UPNs, email addresses, and expiration information
 - user-specific settings files
 - Outlook `.oft` templates unless their content and embedded metadata have been reviewed

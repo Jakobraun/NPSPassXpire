@@ -1,5 +1,6 @@
 # Local staff data and user-specific settings
 /staff.csv
+/staff_sanitized.csv
 /Password Expiration App.settings.json
 
 # Generated password-expiration reports

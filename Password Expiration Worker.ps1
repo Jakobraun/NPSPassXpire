@@ -74,7 +74,7 @@ try {
     $staffDomain = '@nps.k12.va.us'
     $studentDomain = '@npsk12.net'
 
-    $reportRows = @(Get-MgUser -All -Property DisplayName,UserPrincipalName,Mail,UserType,AccountEnabled,LastPasswordChangeDateTime,OnPremisesLastPasswordChangeDateTime,PasswordPolicies |
+    $reportRows = @(Get-MgUser -All -Property DisplayName,GivenName,Surname,UserPrincipalName,Mail,UserType,AccountEnabled,LastPasswordChangeDateTime,OnPremisesLastPasswordChangeDateTime,PasswordPolicies |
         Where-Object {
             $_.AccountEnabled -eq $true -and
             $_.UserType -eq 'Member' -and
@@ -88,9 +88,11 @@ try {
             if ($lastChange) {
                 $expiration = $lastChange.AddDays($maxAgeDays)
                 $daysLeft = [math]::Floor(($expiration - $nowUtc).TotalDays)
-                if ($daysLeft -ge 0 -and $daysLeft -le $SearchDays) {
+                if ($daysLeft -ge -100 -and $daysLeft -le $SearchDays) {
                     [pscustomobject]@{
                         Name = $_.DisplayName
+                        FirstName = $_.GivenName
+                        LastName = $_.Surname
                         UPN = $_.UserPrincipalName
                         Email = $_.Mail
                         Expires = $expiration.ToString('yyyy-MM-dd')
@@ -104,7 +106,7 @@ try {
     if ($reportRows.Count -gt 0) {
         $reportRows | Export-Csv -LiteralPath $csvPath -NoTypeInformation -Encoding UTF8
     } else {
-        '"Name","UPN","Email","Expires","DaysLeft"' | Set-Content -LiteralPath $csvPath -Encoding UTF8
+        '"Name","FirstName","LastName","UPN","Email","Expires","DaysLeft"' | Set-Content -LiteralPath $csvPath -Encoding UTF8
     }
 
     $rows = @(Import-Csv -LiteralPath $csvPath)
