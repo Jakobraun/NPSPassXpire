@@ -1,13 +1,14 @@
 # Password Expiration Report
 
-A portable Windows PowerShell application that queries Microsoft Graph for staff accounts whose passwords are expected to expire soon. It produces a seven-day CSV report and groups email addresses for one-, three-, and seven-day notifications.
+A portable Windows PowerShell application that queries Microsoft Graph for staff accounts whose passwords are expected to expire soon. It produces a seven-day CSV report and groups email addresses for one-, three-, and seven-day notifications. 
+This is designed to work at Norfolk Public Schools where a password expiration policy of 180 days is still in place in 2026 for staff accounts.
 
 ## Requirements
 
 - Windows with Windows PowerShell 5.1 and WPF
 - A Microsoft Entra ID account permitted to read users through Microsoft Graph
 - Access to PowerShell Gallery on the first run
-- Microsoft Edge or Google Chrome for the automatic private device-login window; another browser can be used manually
+- Microsoft Edge or Google Chrome for the automatic private device-login window
 
 The first run installs `Microsoft.Graph.Authentication` and `Microsoft.Graph.Users` for the current Windows user.
 
@@ -43,8 +44,6 @@ This application handles directory and staff information. Do not commit:
 These files are excluded by `.gitignore`. No credentials are intentionally written by the application, but Microsoft Graph authentication and report handling should still follow the organization's security policies.
 
 ## Current limitations
-
-- Password expiration is calculated as the last password change plus a hard-coded 180 days. Confirm that this matches the tenant's authoritative policy before relying on the report.
 - Site matching is name-based rather than UPN- or email-based, so duplicate or unusually formatted names may match incorrectly.
 - Multiple simultaneous instances use the same temporary status files and may interfere with one another.
 - The scripts are not digitally signed. The launcher uses `ExecutionPolicy Bypass` for the process.
