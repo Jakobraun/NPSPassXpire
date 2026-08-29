@@ -1,5 +1,8 @@
+# Load the WPF assemblies used to build and display the desktop interface.
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
+
+# Provide native Windows helpers for restoring and focusing the private sign-in window.
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -9,8 +12,11 @@ public static class WindowFocus {
 }
 "@
 
+# Resolve application files relative to this script so the folder remains portable.
 $desktop = Split-Path -Parent $PSCommandPath
 $workerPath = Join-Path $desktop 'Password Expiration Worker.ps1'
+
+# Use temporary files to exchange status, output, errors, and results with the worker process.
 $resultPath = Join-Path $env:TEMP 'NPS-PasswordExpiration-result.json'
 $authStatusPath = Join-Path $env:TEMP 'NPS-PasswordExpiration-status.txt'
 $workerOutputPath = Join-Path $env:TEMP 'NPS-PasswordExpiration-output.txt'
@@ -19,6 +25,7 @@ $requiredStaffPath = Join-Path $desktop 'staff.csv'
 $sanitizedStaffPath = Join-Path $desktop 'staff_sanitized.csv'
 $noStaffMessage = 'No staff list found. No matches will be generated. Please add names to the staff.csv file.'
 
+# Stop early with a visible error if the Graph-query worker is missing.
 if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
     [System.Windows.MessageBox]::Show(
         "Required application file is missing:`r`n$workerPath",
@@ -29,6 +36,7 @@ if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
     exit 1
 }
 
+# Define the complete WPF window, counters, status area, and email-report sections.
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         Title="Password Expiration Report" MinHeight="650" Width="900" SizeToContent="Height"
@@ -158,6 +166,7 @@ if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
 </Window>
 '@
 
+# Materialize the XAML and bind named controls to PowerShell variables.
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 $runButton = $window.FindName('RunButton')
@@ -174,6 +183,7 @@ $statusText = $window.FindName('StatusText')
 $activityPanel = $window.FindName('ActivityPanel')
 $timerText = $window.FindName('TimerText')
 $dots = @($window.FindName('Dot1'), $window.FindName('Dot2'), $window.FindName('Dot3'))
+# Maintain run state shared by click handlers, the polling timer, and matching functions.
 $script:process = $null
 $script:checking = $false
 $script:dotIndex = 0
@@ -188,6 +198,7 @@ $script:staffImportSummary = $null
 $script:timer = [Windows.Threading.DispatcherTimer]::new()
 $script:timer.Interval = [TimeSpan]::FromMilliseconds(500)
 
+# Start a minimized private Edge or Chrome window for Microsoft device authentication.
 function Open-PrivateDeviceLogin {
     $edgePaths = @(
         (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
@@ -212,6 +223,7 @@ function Open-PrivateDeviceLogin {
     return $null
 }
 
+# Restore and focus the browser after the worker emits a device code.
 function Show-PrivateDeviceLogin {
     $candidates = @()
     if ($script:browserProcess) { $candidates += $script:browserProcess }
@@ -230,6 +242,7 @@ function Show-PrivateDeviceLogin {
     }
 }
 
+# Poll worker files while the background process runs, animate activity, and consume its result.
 $script:timer.Add_Tick({
     if (-not $script:process) { return }
     if (-not $script:process.HasExited) {
@@ -295,6 +308,7 @@ $script:timer.Add_Tick({
     }
 })
 
+# Validate the staff list, reset the UI, and launch the Graph worker when Connect & Run is selected.
 $runButton.Add_Click({
     try {
         if ($script:process -and -not $script:process.HasExited) { return }
@@ -356,11 +370,13 @@ $runButton.Add_Click({
     }
 })
 
+# Normalize a name for comparison by removing case and punctuation differences.
 function ConvertTo-NameKey([string]$Name) {
     if ([string]::IsNullOrWhiteSpace($Name)) { return '' }
     return ([regex]::Replace($Name.ToLowerInvariant(), '[^\p{L}\p{M}]', ''))
 }
 
+# Add full and first/last-only key variants so middle names and initials do not prevent matching.
 function Add-FirstLastNameKeys($KeySet, [string]$FirstName, [string]$LastName) {
     if ([string]::IsNullOrWhiteSpace($FirstName) -or [string]::IsNullOrWhiteSpace($LastName)) { return }
     $firstParts = @($FirstName -split '\s+' | Where-Object { $_ })
@@ -373,6 +389,7 @@ function Add-FirstLastNameKeys($KeySet, [string]$FirstName, [string]$LastName) {
     [void]$KeySet.Add((ConvertTo-NameKey ($lastParts[-1] + $firstParts[0])))
 }
 
+# Match sanitized site staff to Graph results and populate each expiration email bucket.
 function Update-SchoolMatches {
     if ($script:siteStaff.Count -eq 0 -or $script:expiringRows.Count -eq 0) {
         $schoolTotalText.Text = if ($script:siteStaff.Count -gt 0 -and $totalText.Text -eq '0') { '0' } else { '-' }
@@ -445,6 +462,7 @@ function Update-SchoolMatches {
     $email7DayText.Text = (@($sevenDayEmails) | Sort-Object) -join '; '
 }
 
+# Remove unsupported characters, reject placeholders, and apply consistent name capitalization.
 function ConvertTo-SafeStaffName([string]$Value) {
     if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
 
@@ -475,8 +493,11 @@ function ConvertTo-SafeStaffName([string]$Value) {
     return $formattedWords -join ' '
 }
 
+# Parse supported CSV layouts, retain safe staff names, deduplicate them, and write the working CSV.
 function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPath) {
     $file = Get-Item -LiteralPath $SourcePath -ErrorAction Stop
+
+    # Enforce file type and size limits before parsing untrusted CSV content.
     if ($file.Extension -ine '.csv') { throw 'Only .csv files are accepted.' }
     if ($file.Length -gt 131072) { throw 'The CSV is too large. Maximum file size is 128 KB.' }
 
@@ -505,6 +526,7 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
             }
         }
 
+        # Detect either a normal first/last-name table or an asset export with a Location field.
         $normalizedHeaders = @($headers | ForEach-Object { ([string]$_).Trim() })
         $firstNameIndex = -1
         $lastNameIndex = -1
@@ -531,6 +553,7 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
             throw 'The CSV must contain First Name and Last Name headers, or a Location column containing Staff: names.'
         }
 
+        # Process rows independently so malformed or invalid entries do not block valid staff.
         while (-not $parser.EndOfData) {
             if ($lineCount -ge 499) { throw 'The CSV must contain fewer than 500 lines.' }
             $lineCount++
@@ -542,6 +565,7 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
             }
 
             $wasCleaned = $false
+            # Asset exports may contain Staff:, Room:, Student:, and appended two-column rows.
             if ($inputFormat -eq 'AssetLocation') {
                 $isTwoColumnNameRow = $fields.Count -ge 2
                 if ($isTwoColumnNameRow -and $fields.Count -gt 2) {
@@ -609,6 +633,7 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
                 $cleanedRows++
             }
 
+            # Deduplicate case-insensitively while keeping first and last names as separate fields.
             $nameKey = $first + [char]0 + $last
             if (-not $seenNames.Add($nameKey)) {
                 $duplicateRows++
@@ -624,6 +649,7 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
         $parser.Close()
     }
 
+    # Sort the output by last name and replace the prior sanitized file atomically.
     $sortedRows = @($safeRows | Sort-Object @{ Expression = { $_.'Last Name' } }, @{ Expression = { $_.'First Name' } })
     $temporaryPath = $DestinationPath + '.tmp'
     try {
@@ -650,6 +676,7 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
     }
 }
 
+# Regenerate staff_sanitized.csv, load it into memory, and refresh import statistics.
 function Set-SiteStaff([string]$Path) {
     $sanitization = ConvertTo-SanitizedStaffCsv -SourcePath $Path -DestinationPath $sanitizedStaffPath
     $script:siteStaff = @(Import-Csv -LiteralPath $sanitization.Path | ForEach-Object {
@@ -663,6 +690,7 @@ function Set-SiteStaff([string]$Path) {
     Update-SchoolMatches
 }
 
+# Reload staff.csv before each run and prevent Graph login when no usable names remain.
 function Import-RequiredStaffList {
     $script:staffListError = $null
     $script:staffImportSummary = $null
@@ -700,14 +728,17 @@ function Import-RequiredStaffList {
     return $true
 }
 
+# Perform the initial staff import when the application opens.
 if (Import-RequiredStaffList) {
     $logText.Text = "$($script:staffImportSummary) Select Connect & Run to begin."
 }
 
+# Terminate a still-running worker when the application window closes.
 $window.Add_Closing({
     if ($script:process -and -not $script:process.HasExited) {
         $script:process.Kill()
     }
 })
 
+# Start the modal WPF message loop.
 [void]$window.ShowDialog()
