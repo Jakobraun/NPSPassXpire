@@ -65,26 +65,29 @@ if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="1"/>
           <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <StackPanel>
           <TextBlock Text="TOTAL EXPIRED / EXPIRING" FontSize="11" Height="30" FontWeight="SemiBold" Foreground="#64748B"/>
-          <TextBlock Name="TotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#0F5FA8" Margin="0,3,0,0"/>
+          <TextBlock Name="TotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#0F5FA8" Margin="0,3,0,0" Visibility="Collapsed"/>
+          <Button Name="RunButton" Content="Connect &amp; Run" Width="150" Height="42"
+                  Background="#1261A0" Foreground="White" FontWeight="SemiBold"
+                  BorderThickness="0" Cursor="Hand" HorizontalAlignment="Left"/>
         </StackPanel>
         <Border Grid.Column="1" Background="#DDE3EC" Margin="12,0"/>
         <StackPanel Grid.Column="2">
           <TextBlock Text="SITE STAFF IMPORTED" FontSize="11" Height="30" FontWeight="SemiBold" Foreground="#64748B"/>
-          <TextBlock Name="ImportedTotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#18864B" Margin="0,3,0,0"/>
+          <StackPanel Orientation="Horizontal" Height="42">
+            <TextBlock Name="ImportedTotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#18864B"
+                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <Button Name="UpdateButton" Content="Update" Height="42" Padding="10,2"
+                    Background="#18864B" Foreground="White" FontWeight="SemiBold"
+                    BorderThickness="0" Cursor="Hand" VerticalAlignment="Center"/>
+          </StackPanel>
         </StackPanel>
         <Border Grid.Column="3" Background="#DDE3EC" Margin="12,0"/>
         <StackPanel Grid.Column="4">
           <TextBlock Text="EXPIRED / EXPIRING AT SITE(S)" FontSize="11" Height="30" FontWeight="SemiBold" Foreground="#64748B"/>
           <TextBlock Name="SchoolTotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#7C3AED" Margin="0,3,0,0"/>
-        </StackPanel>
-        <StackPanel Grid.Column="5" Margin="18,0,0,0" VerticalAlignment="Center">
-          <Button Name="RunButton" Content="Connect &amp; Run" Width="150" Height="42"
-                  Background="#1261A0" Foreground="White" FontWeight="SemiBold"
-                  BorderThickness="0" Cursor="Hand"/>
         </StackPanel>
       </Grid>
     </Border>
@@ -170,6 +173,7 @@ if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 $runButton = $window.FindName('RunButton')
+$updateButton = $window.FindName('UpdateButton')
 $totalText = $window.FindName('TotalText')
 $importedTotalText = $window.FindName('ImportedTotalText')
 $schoolTotalText = $window.FindName('SchoolTotalText')
@@ -190,6 +194,7 @@ $script:dotIndex = 0
 $script:stopwatch = [Diagnostics.Stopwatch]::new()
 $script:siteStaff = @()
 $script:expiringRows = @()
+$script:hasExpirationReport = $false
 $script:deviceCode = $null
 $script:browserProcess = $null
 $script:browserName = $null
@@ -291,7 +296,10 @@ $script:timer.Add_Tick({
         $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
         if ($result.Success) {
             $totalText.Text = [string]$result.Count
+            $totalText.Visibility = 'Visible'
+            $runButton.Visibility = 'Collapsed'
             $script:expiringRows = @(Import-Csv -LiteralPath $result.CsvPath)
+            $script:hasExpirationReport = $true
             Update-SchoolMatches
             $statusText.Text = "Complete. Report saved to $($result.CsvPath)"
             $statusText.Foreground = '#18864B'
@@ -392,7 +400,7 @@ function Add-FirstLastNameKeys($KeySet, [string]$FirstName, [string]$LastName) {
 # Match sanitized site staff to Graph results and populate each expiration email bucket.
 function Update-SchoolMatches {
     if ($script:siteStaff.Count -eq 0 -or $script:expiringRows.Count -eq 0) {
-        $schoolTotalText.Text = if ($script:siteStaff.Count -gt 0 -and $totalText.Text -eq '0') { '0' } else { '-' }
+        $schoolTotalText.Text = if ($script:siteStaff.Count -gt 0 -and $script:hasExpirationReport) { '0' } else { '-' }
         $email1DayText.Text = ''
         $email3DayText.Text = ''
         $email7DayText.Text = ''
@@ -727,6 +735,55 @@ function Import-RequiredStaffList {
 
     return $true
 }
+
+# Load the newest saved password-expiration report so an updated staff list can be rematched without another Graph query.
+function Load-LatestSavedExpirationReport {
+    $script:expiringRows = @()
+    $script:hasExpirationReport = $false
+    $latestReport = @(Get-ChildItem -LiteralPath $desktop -Filter 'PwdExpire_*.csv' -File -ErrorAction Stop |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1)
+
+    if ($latestReport.Count -eq 0) { return $null }
+
+    $script:expiringRows = @(Import-Csv -LiteralPath $latestReport[0].FullName -ErrorAction Stop)
+    $script:hasExpirationReport = $true
+    return $latestReport[0]
+}
+
+# Re-sanitize the current staff.csv and rematch it against the newest saved report, if one exists.
+$updateButton.Add_Click({
+    try {
+        if (-not (Import-RequiredStaffList)) {
+            [System.Windows.MessageBox]::Show(
+                $noStaffMessage,
+                'Password Expiration Report',
+                'OK',
+                'Warning'
+            ) | Out-Null
+            return
+        }
+
+        $latestReport = Load-LatestSavedExpirationReport
+        Update-SchoolMatches
+        if ($latestReport) {
+            $logText.Text = "$($script:staffImportSummary)`r`nUpdated site matches from $($latestReport.Name)."
+        } else {
+            $logText.Text = "$($script:staffImportSummary)`r`nNo saved PwdExpire report was found to compare."
+        }
+    } catch {
+        $script:expiringRows = @()
+        $script:hasExpirationReport = $false
+        Update-SchoolMatches
+        $logText.Text = 'UPDATE FAILED: ' + $_.Exception.Message
+        [System.Windows.MessageBox]::Show(
+            'Could not update the staff list: ' + $_.Exception.Message,
+            'Password Expiration Report',
+            'OK',
+            'Error'
+        ) | Out-Null
+    }
+})
 
 # Perform the initial staff import when the application opens.
 if (Import-RequiredStaffList) {
