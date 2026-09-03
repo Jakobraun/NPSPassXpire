@@ -67,14 +67,6 @@ if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <StackPanel>
-          <TextBlock Text="TOTAL EXPIRED / EXPIRING" FontSize="11" Height="30" FontWeight="SemiBold" Foreground="#64748B"/>
-          <TextBlock Name="TotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#0F5FA8" Margin="0,3,0,0" Visibility="Collapsed"/>
-          <Button Name="RunButton" Content="Connect &amp; Run" Width="150" Height="42"
-                  Background="#1261A0" Foreground="White" FontWeight="SemiBold"
-                  BorderThickness="0" Cursor="Hand" HorizontalAlignment="Left"/>
-        </StackPanel>
-        <Border Grid.Column="1" Background="#DDE3EC" Margin="12,0"/>
-        <StackPanel Grid.Column="2">
           <TextBlock Text="SITE STAFF IMPORTED" FontSize="11" Height="30" FontWeight="SemiBold" Foreground="#64748B"/>
           <StackPanel Orientation="Horizontal" Height="42">
             <TextBlock Name="ImportedTotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#18864B"
@@ -82,7 +74,15 @@ if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
             <Button Name="UpdateButton" Content="Update" Height="42" Padding="10,2"
                     Background="#18864B" Foreground="White" FontWeight="SemiBold"
                     BorderThickness="0" Cursor="Hand" VerticalAlignment="Center"/>
-          </StackPanel>
+            </StackPanel>
+        </StackPanel>
+        <Border Grid.Column="1" Background="#DDE3EC" Margin="12,0"/>
+        <StackPanel Grid.Column="2">
+          <TextBlock Text="TOTAL EXPIRED / EXPIRING" FontSize="11" Height="30" FontWeight="SemiBold" Foreground="#64748B"/>
+          <TextBlock Name="TotalText" Text="-" FontSize="34" FontWeight="Bold" Foreground="#0F5FA8" Margin="0,3,0,0" Visibility="Collapsed"/>
+          <Button Name="RunButton" Content="Connect &amp; Run" Width="150" Height="42"
+                  Background="#1261A0" Foreground="White" FontWeight="SemiBold"
+                  BorderThickness="0" Cursor="Hand" HorizontalAlignment="Left"/>
         </StackPanel>
         <Border Grid.Column="3" Background="#DDE3EC" Margin="12,0"/>
         <StackPanel Grid.Column="4">
@@ -507,7 +507,7 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
 
     # Enforce file type and size limits before parsing untrusted CSV content.
     if ($file.Extension -ine '.csv') { throw 'Only .csv files are accepted.' }
-    if ($file.Length -gt 131072) { throw 'The CSV is too large. Maximum file size is 128 KB.' }
+    if ($file.Length -gt 1048576) { throw 'The CSV is too large. Maximum file size is 1 MB.' }
 
     Add-Type -AssemblyName Microsoft.VisualBasic | Out-Null
     $parser = [Microsoft.VisualBasic.FileIO.TextFieldParser]::new($file.FullName)
@@ -563,14 +563,21 @@ function ConvertTo-SanitizedStaffCsv([string]$SourcePath, [string]$DestinationPa
 
         # Process rows independently so malformed or invalid entries do not block valid staff.
         while (-not $parser.EndOfData) {
-            if ($lineCount -ge 499) { throw 'The CSV must contain fewer than 500 lines.' }
-            $lineCount++
             try {
                 $fields = @($parser.ReadFields())
             } catch [Microsoft.VisualBasic.FileIO.MalformedLineException] {
+                if ($lineCount -ge 999) { throw 'The CSV must contain no more than 999 rows.' }
+                $lineCount++
                 $skippedRows++
                 continue
             }
+
+            # Ignore blank and comma-only CSV records before enforcing the row limit.
+            if (@($fields | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count -eq 0) {
+                continue
+            }
+            if ($lineCount -ge 999) { throw 'The CSV must contain no more than 999 rows.' }
+            $lineCount++
 
             $wasCleaned = $false
             # Asset exports may contain Staff:, Room:, Student:, and appended two-column rows.

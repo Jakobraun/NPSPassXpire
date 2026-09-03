@@ -34,7 +34,7 @@ Alex,Rivera
 Taylor,Morgan
 ```
 
-The application accepts fewer than 500 lines and a maximum file size of 128 KB. The table must include `First Name` and `Last Name` headers, or a `Location` column containing `Staff:` values; other columns are ignored. Sanitized names contain only English letters, single spaces, periods, apostrophes, and hyphens.
+The application accepts up to 999 non-empty rows and a maximum file size of 1 MB. Blank and comma-only rows are ignored. The table must include `First Name` and `Last Name` headers, or a `Location` column containing `Staff:` values; other columns are ignored. Sanitized names contain only English letters, single spaces, periods, apostrophes, and hyphens.
 
 ## Privacy and security
 
